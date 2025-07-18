@@ -26,7 +26,9 @@ const fetchPlaceSuggestions = async (input: string): Promise<PlaceSuggestion[]> 
   };
   try {
     const res = await axios.get(url, { params });
-    if (res.data.status === "OK") {
+
+    
+    if (res.status === 200) {
       return res.data.predictions.map((item: any) => ({
         description: item.description,
         place_id: item.place_id,
@@ -52,6 +54,7 @@ export default function AddressInput({ value, onChange, onSelect }: AddressInput
     setLoading(true);
     const handler = setTimeout(() => {
       fetchPlaceSuggestions(value).then((results) => {
+        
         if (active) setOptions(results);
         setLoading(false);
       });
