@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>3D智能仓库管理系统</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          sans-serif;
+        background: #0a0a0a;
+        overflow: hidden;
+      }
+
+      #container {
+        position: relative;
+        width: 100vw;
+        height: 100vh;
+      }
+
+      #ui-panel {
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        border-radius: 12px;
+        padding: 20px;
+        width: 320px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        z-index: 1000;
+      }
+
+      h1 {
+        color: #2c3e50;
+        margin-bottom: 20px;
+        font-size: 18px;
+        font-weight: 600;
+      }
+
+      .search-container {
+        margin-bottom: 20px;
+      }
+
+      .search-input {
+        width: 100%;
+        padding: 12px 16px;
+        border: 2px solid #e1e5e9;
+        border-radius: 8px;
+        font-size: 14px;
+        transition: border-color 0.3s;
+      }
+
+      .search-input:focus {
+        outline: none;
+        border-color: #3498db;
+      }
+
+      .controls {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-bottom: 20px;
+      }
+
+      .btn {
+        padding: 10px 16px;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 500;
+        transition: all 0.3s;
+      }
+
+      .btn-primary {
+        background: #3498db;
+        color: white;
+      }
+
+      .btn-primary:hover {
+        background: #2980b9;
+        transform: translateY(-1px);
+      }
+
+      .btn-secondary {
+        background: #95a5a6;
+        color: white;
+      }
+
+      .btn-secondary:hover {
+        background: #7f8c8d;
+      }
+
+      .btn-success {
+        background: #27ae60;
+        color: white;
+      }
+
+      .btn-success:hover {
+        background: #229954;
+      }
+
+      .btn-warning {
+        background: #f39c12;
+        color: white;
+      }
+
+      .btn-warning:hover {
+        background: #e67e22;
+      }
+
+      .info-panel {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 15px;
+      }
+
+      .info-title {
+        font-weight: 600;
+        color: #2c3e50;
+        margin-bottom: 8px;
+      }
+
+      .info-item {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 5px;
+        font-size: 13px;
+      }
+
+      .status-indicator {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        margin-right: 8px;
+      }
+
+      .status-available {
+        background: #27ae60;
+      }
+      .status-occupied {
+        background: #e74c3c;
+      }
+      .status-reserved {
+        background: #f39c12;
+      }
+
+      .item-list {
+        max-height: 200px;
+        overflow-y: auto;
+        border: 1px solid #e1e5e9;
+        border-radius: 6px;
+        padding: 10px;
+      }
+
+      .item-entry {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 0;
+        border-bottom: 1px solid #f0f0f0;
+        cursor: pointer;
+        transition: background-color 0.2s;
+      }
+
+      .item-entry:hover {
+        background-color: #f8f9fa;
+      }
+
+      .item-entry:last-child {
+        border-bottom: none;
+      }
+
+      .loading {
+        text-align: center;
+        color: #7f8c8d;
+        font-style: italic;
+      }
+
+      #stats {
+        position: absolute;
+        bottom: 20px;
+        left: 20px;
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        padding: 15px;
+        border-radius: 8px;
+        font-size: 12px;
+        z-index: 1000;
+      }
+
+      .highlight-path {
+        color: #e74c3c;
+        font-weight: bold;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="container">
+      <div id="ui-panel">
+        <h1>🏢 3D智能仓库</h1>
+
+        <div class="search-container">
+          <input
+            type="text"
+            id="searchInput"
+            class="search-input"
+            placeholder="搜索货物编号或名称..."
+          />
+        </div>
+
+        <div class="controls">
+          <button class="btn btn-primary" onclick="findItem()">
+            🔍 查找货物
+          </button>
+          <button class="btn btn-secondary" onclick="resetView()">
+            🔄 重置视角
+          </button>
+          <button class="btn btn-success" onclick="showOptimalPath()">
+            🚀 最优路径
+          </button>
+          <button class="btn btn-warning" onclick="toggleHeatmap()">
+            🔥 热力图
+          </button>
+        </div>
+
+        <div class="info-panel">
+          <div class="info-title">📊 仓库概况</div>
+          <div class="info-item">
+            <span>总货位:</span>
+            <span id="totalSlots">0</span>
+          </div>
+          <div class="info-item">
+            <span
+              ><span class="status-indicator status-occupied"></span
+              >已占用:</span
+            >
+            <span id="occupiedSlots">0</span>
+          </div>
+          <div class="info-item">
+            <span
+              ><span class="status-indicator status-available"></span
+              >空闲:</span
+            >
+            <span id="availableSlots">0</span>
+          </div>
+          <div class="info-item">
+            <span>利用率:</span>
+            <span id="utilization">0%</span>
+          </div>
+        </div>
+
+        <div class="info-panel">
+          <div class="info-title">📦 当前选中</div>
+          <div id="selectedInfo" class="loading">点击货架查看详情</div>
+        </div>
+
+        <div class="info-panel">
+          <div class="info-title">📋 货物列表</div>
+          <div id="itemList" class="item-list"></div>
+        </div>
+      </div>
+
+      <div id="stats">
+        <div>FPS: <span id="fps">0</span></div>
+        <div>摄像机: <span id="camera-pos">0, 0, 0</span></div>
+        <div>鼠标控制: 左键旋转 | 右键平移 | 滚轮缩放</div>
+      </div>
+    </div>
+
+    <script>
+      // 全局变量
+      let scene, camera, renderer, controls;
+      let warehouse = [];
+      let selectedRack = null;
+      let searchResults = [];
+      let pathLines = [];
+      let heatmapMode = false;
+      let frameCount = 0;
+      let lastTime = performance.now();
+
+      // 仓库配置
+      const config = {
+        rows: 10,
+        cols: 15,
+        levels: 1,
+        rackWidth: 2.5,
+        rackHeight: 2,
+        rackDepth: 1.5,
+        aisleWidth: 2.5,
+        colors: {
+          available: 0x27ae60,
+          occupied: 0xe74c3c,
+          reserved: 0xf39c12,
+          selected: 0x3498db,
+          highlight: 0xf1c40f,
+        },
+      };
+
+      // 货物数据
+      const items = generateItems();
+
+      // 初始化
+      init();
+      animate();
+
+      function init() {
+        // 创建场景
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a1a);
+        scene.fog = new THREE.Fog(0x1a1a1a, 50, 200);
+
+        // 创建相机
+        camera = new THREE.PerspectiveCamera(
+          75,
+          window.innerWidth / window.innerHeight,
+          0.1,
+          1000
+        );
+        camera.position.set(25, 15, 25);
+
+        // 创建渲染器
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.getElementById("container").appendChild(renderer.domElement);
+
+        // 添加简单的轨道控制
+        setupControls();
+
+        // 创建灯光
+        createLights();
+
+        // 创建仓库
+        createWarehouse();
+
+        // 创建地面
+        createFloor();
+
+        // 更新UI
+        updateStats();
+        updateItemList();
+
+        // 事件监听
+        window.addEventListener("resize", onWindowResize);
+        renderer.domElement.addEventListener("click", onMouseClick);
+        document
+          .getElementById("searchInput")
+          .addEventListener("keypress", function (e) {
+            if (e.key === "Enter") {
+              findItem();
+            }
+          });
+      }
+
+      function setupControls() {
+        // 简单的鼠标控制
+        let isMouseDown = false;
+        let mouseX = 0,
+          mouseY = 0;
+        let targetX = 0,
+          targetY = 0;
+
+        renderer.domElement.addEventListener("mousedown", (e) => {
+          isMouseDown = true;
+          mouseX = e.clientX;
+          mouseY = e.clientY;
+        });
+
+        renderer.domElement.addEventListener("mouseup", () => {
+          isMouseDown = false;
+        });
+
+        renderer.domElement.addEventListener("mousemove", (e) => {
+          if (!isMouseDown) return;
+
+          const deltaX = e.clientX - mouseX;
+          const deltaY = e.clientY - mouseY;
+
+          targetX += deltaX * 0.01;
+          targetY += deltaY * 0.01;
+
+          mouseX = e.clientX;
+          mouseY = e.clientY;
+
+          // 旋转相机
+          const radius = 35;
+          camera.position.x = radius * Math.cos(targetX) * Math.cos(targetY);
+          camera.position.z = radius * Math.sin(targetX) * Math.cos(targetY);
+          camera.position.y = radius * Math.sin(targetY) + 10;
+          camera.lookAt(0, 0, 0);
+        });
+
+        renderer.domElement.addEventListener("wheel", (e) => {
+          const scale = e.deltaY > 0 ? 1.1 : 0.9;
+          camera.position.multiplyScalar(scale);
+          camera.lookAt(0, 0, 0);
+        });
+      }
+
+      function createLights() {
+        // 环境光
+        const ambientLight = new THREE.AmbientLight(0x404040, 0.4);
+        scene.add(ambientLight);
+
+        // 主光源
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(50, 50, 50);
+        directionalLight.castShadow = true;
+        directionalLight.shadow.mapSize.width = 2048;
+        directionalLight.shadow.mapSize.height = 2048;
+        scene.add(directionalLight);
+
+        // 点光源
+        const pointLight = new THREE.PointLight(0xffffff, 0.5, 100);
+        pointLight.position.set(0, 30, 0);
+        scene.add(pointLight);
+      }
+
+      function createWarehouse() {
+        warehouse = [];
+
+        for (let row = 0; row < config.rows; row++) {
+          for (let col = 0; col < config.cols; col++) {
+            for (let level = 0; level < config.levels; level++) {
+              const rack = createRack(row, col, level);
+              warehouse.push(rack);
+              scene.add(rack);
+            }
+          }
+        }
+      }
+
+      function createRack(row, col, level) {
+        const geometry = new THREE.BoxGeometry(
+          config.rackWidth,
+          config.rackHeight,
+          config.rackDepth
+        );
+
+        // 随机分配货物状态
+        const random = Math.random();
+        let status = "available";
+        if (random < 0.7) status = "occupied";
+        else if (random < 0.85) status = "reserved";
+
+        const material = new THREE.MeshLambertMaterial({
+          color: config.colors[status],
+          transparent: true,
+          opacity: 0.8,
+        });
+
+        const rack = new THREE.Mesh(geometry, material);
+
+        // 位置计算
+        const x =
+          (col - config.cols / 2) * (config.rackWidth + config.aisleWidth);
+        const y = config.rackHeight / 2;
+        const z =
+          (row - config.rows / 2) * (config.rackDepth + config.aisleWidth);
+
+        rack.position.set(x, y, z);
+        rack.castShadow = true;
+        rack.receiveShadow = true;
+
+        // 添加数据
+        rack.userData = {
+          row: row,
+          col: col,
+          level: level,
+          status: status,
+          item:
+            status === "occupied"
+              ? items[Math.floor(Math.random() * items.length)]
+              : null,
+          id: `${String.fromCharCode(65 + row)}${String(col + 1).padStart(
+            2,
+            "0"
+          )}`,
+        };
+
+        // 添加标签
+        if (rack.userData.item) {
+          const label = createLabel(rack.userData.item.name);
+          label.position.set(x, y + 1.5, z);
+          scene.add(label);
+          rack.userData.label = label;
+        }
+
+        return rack;
+      }
+
+      function createLabel(text) {
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d");
+        canvas.width = 256;
+        canvas.height = 64;
+
+        context.fillStyle = "rgba(0, 0, 0, 0.8)";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+
+        context.fillStyle = "white";
+        context.font = "20px Arial";
+        context.textAlign = "center";
+        context.fillText(text, canvas.width / 2, canvas.height / 2 + 5);
+
+        const texture = new THREE.CanvasTexture(canvas);
+        const material = new THREE.SpriteMaterial({ map: texture });
+        const sprite = new THREE.Sprite(material);
+        sprite.scale.set(4, 1, 1);
+
+        return sprite;
+      }
+
+      function createFloor() {
+        const geometry = new THREE.PlaneGeometry(100, 100);
+        const material = new THREE.MeshLambertMaterial({
+          color: 0x2c3e50,
+          transparent: true,
+          opacity: 0.8,
+        });
+
+        const floor = new THREE.Mesh(geometry, material);
+        floor.rotation.x = -Math.PI / 2;
+        floor.position.y = -1;
+        floor.receiveShadow = true;
+        scene.add(floor);
+
+        // 添加过道标识
+        createAisleMarkers();
+
+        // 添加入口标识
+        createEntranceMarker();
+      }
+
+      function generateItems() {
+        const categories = [
+          "办公用品",
+          "电子配件",
+          "服装鞋帽",
+          "日用百货",
+          "工具五金",
+          "文具书籍",
+          "食品饮料",
+          "化妆用品",
+        ];
+        const items = [];
+
+        for (let i = 0; i < 150; i++) {
+          const category =
+            categories[Math.floor(Math.random() * categories.length)];
+          items.push({
+            id: `SKU${String(i + 1).padStart(4, "0")}`,
+            name: `${category}${String(i + 1).padStart(3, "0")}`,
+            category: category,
+            weight: Math.random() * 20 + 0.5,
+            value: Math.random() * 500 + 50,
+            lastAccessed: new Date(
+              Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000
+            ),
+          });
+        }
+
+        return items;
+      }
+
+      function createAisleMarkers() {
+        // 创建过道标识
+        for (let i = 0; i < config.rows; i++) {
+          const geometry = new THREE.PlaneGeometry(1, 0.5);
+          const canvas = document.createElement("canvas");
+          const context = canvas.getContext("2d");
+          canvas.width = 128;
+          canvas.height = 64;
+
+          context.fillStyle = "#34495e";
+          context.fillRect(0, 0, canvas.width, canvas.height);
+          context.fillStyle = "white";
+          context.font = "24px Arial";
+          context.textAlign = "center";
+          context.fillText(
+            `第${i + 1}排`,
+            canvas.width / 2,
+            canvas.height / 2 + 8
+          );
+
+          const texture = new THREE.CanvasTexture(canvas);
+          const material = new THREE.MeshBasicMaterial({ map: texture });
+          const marker = new THREE.Mesh(geometry, material);
+
+          marker.position.set(
+            -(config.cols / 2) * (config.rackWidth + config.aisleWidth) - 3,
+            0.1,
+            (i - config.rows / 2) * (config.rackDepth + config.aisleWidth)
+          );
+          marker.rotation.x = -Math.PI / 2;
+          scene.add(marker);
+        }
+      }
+
+      function createEntranceMarker() {
+        // 创建入口标识
+        const geometry = new THREE.ConeGeometry(1, 3, 8);
+        const material = new THREE.MeshLambertMaterial({ color: 0x3498db });
+        const entrance = new THREE.Mesh(geometry, material);
+
+        entrance.position.set(
+          0,
+          1.5,
+          -(config.rows / 2) * (config.rackDepth + config.aisleWidth) - 5
+        );
+        scene.add(entrance);
+
+        // 添加"入口"标签
+        const label = createLabel("仓库入口");
+        label.position.set(
+          0,
+          4,
+          -(config.rows / 2) * (config.rackDepth + config.aisleWidth) - 5
+        );
+        scene.add(label);
+      }
+
+      function onMouseClick(event) {
+        const mouse = new THREE.Vector2();
+        mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+        mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(mouse, camera);
+
+        const intersects = raycaster.intersectObjects(warehouse);
+
+        if (intersects.length > 0) {
+          selectRack(intersects[0].object);
+        }
+      }
+
+      function selectRack(rack) {
+        // 重置之前的选中
+        if (selectedRack) {
+          selectedRack.material.color.setHex(
+            config.colors[selectedRack.userData.status]
+          );
+        }
+
+        selectedRack = rack;
+        rack.material.color.setHex(config.colors.selected);
+
+        // 更新UI
+        updateSelectedInfo();
+      }
+
+      function updateSelectedInfo() {
+        const info = document.getElementById("selectedInfo");
+        if (!selectedRack) {
+          info.innerHTML = "点击货架查看详情";
+          return;
+        }
+
+        const data = selectedRack.userData;
+        info.innerHTML = `
+                <div><strong>货位:</strong> ${data.id}</div>
+                <div><strong>状态:</strong> ${getStatusText(data.status)}</div>
+                ${
+                  data.item
+                    ? `
+                <div><strong>货物:</strong> ${data.item.name}</div>
+                <div><strong>编号:</strong> ${data.item.id}</div>
+                <div><strong>类别:</strong> ${data.item.category}</div>
+                <div><strong>重量:</strong> ${data.item.weight.toFixed(
+                  1
+                )}kg</div>
+                `
+                    : ""
+                }
+            `;
+      }
+
+      function getStatusText(status) {
+        const statusMap = {
+          available: "空闲",
+          occupied: "已占用",
+          reserved: "预留",
+        };
+        return statusMap[status] || status;
+      }
+
+      function updateStats() {
+        const total = warehouse.length;
+        const occupied = warehouse.filter(
+          (r) => r.userData.status === "occupied"
+        ).length;
+        const available = warehouse.filter(
+          (r) => r.userData.status === "available"
+        ).length;
+        const utilization = ((occupied / total) * 100).toFixed(1);
+
+        document.getElementById("totalSlots").textContent = total;
+        document.getElementById("occupiedSlots").textContent = occupied;
+        document.getElementById("availableSlots").textContent = available;
+        document.getElementById("utilization").textContent = utilization + "%";
+      }
+
+      function updateItemList() {
+        const itemList = document.getElementById("itemList");
+        const occupiedRacks = warehouse.filter(
+          (r) => r.userData.status === "occupied"
+        );
+
+        itemList.innerHTML = "";
+        occupiedRacks.slice(0, 10).forEach((rack) => {
+          const item = rack.userData.item;
+          const div = document.createElement("div");
+          div.className = "item-entry";
+          div.innerHTML = `
+                    <div>
+                        <div><strong>${item.name}</strong></div>
+                        <div style="font-size: 11px; color: #666;">${item.id}</div>
+                    </div>
+                    <div style="text-align: right; font-size: 11px;">
+                        ${rack.userData.id}
+                    </div>
+                `;
+          div.onclick = () => selectRack(rack);
+          itemList.appendChild(div);
+        });
+      }
+
+      function findItem() {
+        const query = document
+          .getElementById("searchInput")
+          .value.toLowerCase();
+        if (!query) return;
+
+        // 清除之前的搜索结果
+        clearSearchResults();
+
+        const results = warehouse.filter((rack) => {
+          if (rack.userData.status !== "occupied") return false;
+          const item = rack.userData.item;
+          return (
+            item.name.toLowerCase().includes(query) ||
+            item.id.toLowerCase().includes(query) ||
+            item.category.toLowerCase().includes(query)
+          );
+        });
+
+        searchResults = results;
+
+        if (results.length > 0) {
+          // 高亮显示搜索结果
+          results.forEach((rack) => {
+            rack.material.color.setHex(config.colors.highlight);
+          });
+
+          // 聚焦到第一个结果
+          const firstResult = results[0];
+          selectRack(firstResult);
+
+          // 计算最优路径
+          showOptimalPath();
+
+          alert(`找到 ${results.length} 个匹配项`);
+        } else {
+          alert("未找到匹配的货物");
+        }
+      }
+
+      function clearSearchResults() {
+        searchResults.forEach((rack) => {
+          rack.material.color.setHex(config.colors[rack.userData.status]);
+        });
+        searchResults = [];
+        clearPathLines();
+      }
+
+      function showOptimalPath() {
+        if (searchResults.length === 0) return;
+
+        clearPathLines();
+
+        // 从入口开始的路径规划
+        const entrance = new THREE.Vector3(
+          0,
+          0.5,
+          -(config.rows / 2) * (config.rackDepth + config.aisleWidth) - 5
+        );
+        const points = [entrance];
+
+        // 按行列顺序排序，优化拣货路径
+        const sortedResults = searchResults.sort((a, b) => {
+          if (a.userData.row !== b.userData.row) {
+            return a.userData.row - b.userData.row;
+          }
+          return a.userData.col - b.userData.col;
+        });
+
+        sortedResults.forEach((rack) => {
+          const pos = rack.position.clone();
+          pos.y = 0.5; // 地面高度
+          points.push(pos);
+        });
+
+        const geometry = new THREE.BufferGeometry().setFromPoints(points);
+        const material = new THREE.LineBasicMaterial({
+          color: 0xff0000,
+          linewidth: 5,
+        });
+        const line = new THREE.Line(geometry, material);
+
+        pathLines.push(line);
+        scene.add(line);
+
+        // 添加路径箭头
+        for (let i = 0; i < points.length - 1; i++) {
+          const arrow = createArrow(points[i], points[i + 1]);
+          pathLines.push(arrow);
+          scene.add(arrow);
+        }
+      }
+
+      function createArrow(start, end) {
+        const direction = new THREE.Vector3()
+          .subVectors(end, start)
+          .normalize();
+        const length = start.distanceTo(end);
+        const arrowGeometry = new THREE.ConeGeometry(0.3, 0.8, 8);
+        const arrowMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+        const arrow = new THREE.Mesh(arrowGeometry, arrowMaterial);
+
+        const midPoint = new THREE.Vector3()
+          .addVectors(start, end)
+          .multiplyScalar(0.5);
+        arrow.position.copy(midPoint);
+        arrow.position.y += 0.5;
+
+        arrow.lookAt(end);
+        arrow.rotateX(Math.PI / 2);
+
+        return arrow;
+      }
+
+      function clearPathLines() {
+        pathLines.forEach((line) => scene.remove(line));
+        pathLines = [];
+      }
+
+      function toggleHeatmap() {
+        heatmapMode = !heatmapMode;
+
+        warehouse.forEach((rack) => {
+          if (heatmapMode) {
+            // 基于最后访问时间的热力图
+            const item = rack.userData.item;
+            if (item) {
+              const daysSinceAccess =
+                (Date.now() - item.lastAccessed.getTime()) /
+                (1000 * 60 * 60 * 24);
+              const heat = Math.max(0, 1 - daysSinceAccess / 30); // 30天内的热度
+              const color = new THREE.Color();
+              color.setHSL(heat * 0.3, 1, 0.5); // 从红到绿
+              rack.material.color = color;
+            }
+          } else {
+            rack.material.color.setHex(config.colors[rack.userData.status]);
+          }
+        });
+      }
+
+      function resetView() {
+        camera.position.set(25, 15, 25);
+        camera.lookAt(0, 0, 0);
+
+        if (selectedRack) {
+          selectedRack.material.color.setHex(
+            config.colors[selectedRack.userData.status]
+          );
+          selectedRack = null;
+        }
+
+        clearSearchResults();
+        updateSelectedInfo();
+
+        document.getElementById("searchInput").value = "";
+      }
+
+      function animate() {
+        requestAnimationFrame(animate);
+
+        // 更新FPS
+        frameCount++;
+        const currentTime = performance.now();
+        if (currentTime - lastTime >= 1000) {
+          document.getElementById("fps").textContent = frameCount;
+          frameCount = 0;
+          lastTime = currentTime;
+        }
+
+        // 更新摄像机位置显示
+        document.getElementById(
+          "camera-pos"
+        ).textContent = `${camera.position.x.toFixed(
+          1
+        )}, ${camera.position.y.toFixed(1)}, ${camera.position.z.toFixed(1)}`;
+
+        renderer.render(scene, camera);
+      }
+
+      function onWindowResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      }
+    </script>
+  </body>
+</html>
